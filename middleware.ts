@@ -59,11 +59,12 @@ export async function middleware(request: NextRequest) {
   } = await supabase.auth.getUser()
 
   // Protected routes
-  const protectedRoutes = ['/feed', '/post', '/trends', '/inbox', '/settings', '/moderation']
+  const protectedRoutes = ['/feed', '/post', '/trends', '/inbox', '/settings', '/moderation', '/onboarding']
   const authRoutes = ['/auth/sign-in', '/auth/sign-up']
   
   const isProtectedRoute = protectedRoutes.some(route => request.nextUrl.pathname.startsWith(route))
   const isAuthRoute = authRoutes.some(route => request.nextUrl.pathname.startsWith(route))
+  const isOnboarding = request.nextUrl.pathname.startsWith('/onboarding')
 
   // Redirect to sign-in if not authenticated and trying to access protected route
   if (isProtectedRoute && !user) {
@@ -76,7 +77,7 @@ export async function middleware(request: NextRequest) {
   }
 
   // Check if user needs to complete onboarding
-  if (user && isProtectedRoute && !request.nextUrl.pathname.startsWith('/onboarding')) {
+  if (user && isProtectedRoute && !isOnboarding) {
     const { data: profile } = await supabase
       .from('profiles')
       .select('university_id')
