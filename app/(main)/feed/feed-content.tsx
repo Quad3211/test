@@ -6,6 +6,36 @@ interface FeedContentProps {
   filter: string
 }
 
+interface DatabasePost {
+  id: string
+  title: string | null
+  content: string
+  is_anonymous: boolean
+  sentiment: string | null
+  created_at: string
+  author_user_id: string
+}
+
+interface VoteCount {
+  post_id: string
+  upvotes: number
+  downvotes: number
+}
+
+interface UserVote {
+  post_id: string
+  value: 'up' | 'down'
+}
+
+interface CommentCount {
+  post_id: string
+}
+
+interface AuthorProfile {
+  user_id: string
+  name: string
+}
+
 export async function FeedContent({ filter }: FeedContentProps) {
   const supabase = await createClient()
   
@@ -24,16 +54,7 @@ export async function FeedContent({ filter }: FeedContentProps) {
   // Build query based on filter
   let query = supabase
     .from('posts')
-    .select(`
-      id,
-      title,
-      content,
-      is_anonymous,
-      sentiment,
-      created_at,
-      author_user_id,
-      profiles!posts_author_user_id_fkey(name)
-    `)
+    .select('id, title, content, is_anonymous, sentiment, created_at, author_user_id')
     .eq('university_id', profile.university_id)
     .eq('status', 'active')
 
@@ -61,8 +82,10 @@ export async function FeedContent({ filter }: FeedContentProps) {
   if (error) {
     console.error('Feed error:', error)
     return (
-      <div className="text-center py-12 text-muted-foreground">
-        Failed to load posts. Please try again.
+      <div className="text-center py-12">
+        <div className="text-destructive mb-2">Failed to load posts</div>
+        <div className="text-sm text-muted-foreground">Error: {error.message}</div>
+        <div className="text-xs text-muted-foreground mt-2">Please refresh the page or contact support if this persists.</div>
       </div>
     )
   }
@@ -93,19 +116,40 @@ export async function FeedContent({ filter }: FeedContentProps) {
     .eq('user_id', user.id)
     .in('post_id', postIds)
 
-  const { data: commentCounts } = await supabase
+  const { data: comments } = await supabase
     .from('comments')
     .select('post_id')
     .in('post_id', postIds)
     .eq('status', 'active')
 
-  // Create lookup maps
-  const voteCountMap = new Map(voteCounts?.map(v => [v.post_id, v]) || [])
-  const userVoteMap = new Map(userVotes?.map(v => [v.post_id, v.value]) || [])
+  // Get author names for non-anonymous posts
+  const nonAnonPosts = posts.filter(p => !p.is_anonymous)
+  const authorIds = [...new Set(nonAnonPosts.map(p => p.author_user_id))]
+  
+  const { data: authors } = await supabase
+    .from('profiles')
+    .select('user_id, name')
+    .in('user_id', authorIds)
+
+  // Create lookup maps with proper typing
+  const voteCountMap = new Map<string, VoteCount>(
+    (voteCounts || []).map(v => [v.post_id, v])
+  )
+  
+  const userVoteMap = new Map<string, 'up' | 'down'>(
+    (userVotes || []).map(v => [v.post_id, v.value])
+  )
+  
   const commentCountMap = new Map<string, number>()
-  commentCounts?.forEach(c => {
-    commentCountMap.set(c.post_id, (commentCountMap.get(c.post_id) || 0) + 1)
-  })
+  if (comments) {
+    comments.forEach(c => {
+      commentCountMap.set(c.post_id, (commentCountMap.get(c.post_id) || 0) + 1)
+    })
+  }
+  
+  const authorMap = new Map<string, string>(
+    (authors || []).map(a => [a.user_id, a.name])
+  )
 
   // Transform posts for PostCard component
   const feedPosts: PostCardData[] = posts.map(post => {
@@ -117,7 +161,7 @@ export async function FeedContent({ filter }: FeedContentProps) {
       is_anonymous: post.is_anonymous,
       sentiment: post.sentiment,
       created_at: post.created_at,
-      author_name: post.is_anonymous ? undefined : (post.profiles as any)?.name,
+      author_name: post.is_anonymous ? undefined : authorMap.get(post.author_user_id),
       upvotes: votes?.upvotes || 0,
       downvotes: votes?.downvotes || 0,
       user_vote: userVoteMap.get(post.id) || null,
