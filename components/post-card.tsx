@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { formatDistanceToNow } from 'date-fns'
-import { MessageSquare, MoreHorizontal } from 'lucide-react'
+import { MessageSquare } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { VoteButtons } from '@/components/vote-buttons'
 import { AnonymousBadge } from '@/components/anonymous-badge'
@@ -31,12 +31,12 @@ interface PostCardProps {
 }
 
 export function PostCard({ post, className }: PostCardProps) {
-  const excerpt = post.content.length > 200 
-    ? post.content.slice(0, 200) + '...' 
+  const excerpt = post.content.length > 180
+    ? post.content.slice(0, 180) + '…'
     : post.content
 
   return (
-    <Card className={cn('transition-all duration-150 hover:shadow-md', className)}>
+    <Card className={cn('transition-all duration-150 hover:shadow-md hover:border-border/80', className)}>
       <CardContent className="p-4">
         <div className="flex gap-3">
           {/* Vote Controls */}
@@ -47,48 +47,48 @@ export function PostCard({ post, className }: PostCardProps) {
             initialDownvotes={post.downvotes}
             initialUserVote={post.user_vote}
             layout="vertical"
-            className="pt-1"
+            className="pt-0.5"
           />
-          
+
           {/* Post Content */}
           <div className="flex-1 min-w-0">
             <Link href={`/post/${post.id}`} className="block group">
               {/* Header */}
-              <div className="flex items-center gap-2 mb-1.5 flex-wrap">
+              <div className="flex items-center gap-2 mb-1 flex-wrap">
                 {post.is_anonymous ? (
                   <AnonymousBadge size="sm" />
                 ) : (
-                  <span className="text-sm font-medium">{post.author_name || 'User'}</span>
+                  <span className="text-sm font-semibold">{post.author_name || 'User'}</span>
                 )}
                 <span className="text-xs text-muted-foreground">
                   {formatDistanceToNow(new Date(post.created_at), { addSuffix: true })}
                 </span>
                 {post.sentiment && <SentimentBadge sentiment={post.sentiment} />}
               </div>
-              
+
               {/* Title */}
               {post.title && (
-                <h3 className="font-semibold text-foreground group-hover:text-primary transition-colors mb-1 text-balance">
+                <h3 className="font-semibold text-sm text-foreground group-hover:text-primary transition-colors mb-0.5 text-balance leading-snug">
                   {post.title}
                 </h3>
               )}
-              
+
               {/* Content excerpt */}
-              <p className="text-sm text-muted-foreground line-clamp-3">
+              <p className="text-sm text-muted-foreground line-clamp-2 leading-relaxed">
                 {excerpt}
               </p>
             </Link>
-            
+
             {/* Footer */}
-            <div className="flex items-center gap-4 mt-3 pt-2 border-t border-border/50">
-              <Link 
+            <div className="flex items-center gap-3 mt-2.5 pt-2 border-t border-border/40">
+              <Link
                 href={`/post/${post.id}`}
-                className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
+                className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
               >
-                <MessageSquare className="h-4 w-4" />
+                <MessageSquare className="h-3.5 w-3.5" />
                 {post.comment_count} {post.comment_count === 1 ? 'comment' : 'comments'}
               </Link>
-              
+
               <ReportDialog targetType="post" targetId={post.id} />
             </div>
           </div>

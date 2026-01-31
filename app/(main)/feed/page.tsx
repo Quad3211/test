@@ -1,8 +1,7 @@
 import { Suspense } from 'react'
-import { createClient } from '@/lib/supabase/server'
 import { FeedContent } from './feed-content'
 import { FeedFilters } from './feed-filters'
-import { Loader2 } from 'lucide-react'
+import { FeedSkeleton } from '@/components/skeletons'
 
 export const dynamic = 'force-dynamic'
 
@@ -16,17 +15,13 @@ export default async function FeedPage({
 
   return (
     <div className="max-w-2xl mx-auto">
-      <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-display font-bold">Campus Feed</h1>
+      <div className="flex items-center justify-between mb-5">
+        <h1 className="text-2xl font-display font-bold tracking-tight">Campus Feed</h1>
       </div>
-      
+
       <FeedFilters currentFilter={filter} />
-      
-      <Suspense fallback={
-        <div className="flex items-center justify-center py-12">
-          <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-        </div>
-      }>
+
+      <Suspense fallback={<FeedSkeleton />}>
         <FeedContent filter={filter} />
       </Suspense>
     </div>

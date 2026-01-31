@@ -48,7 +48,7 @@ export function PostDetailContent({ post, comments: initialComments, userId }: P
 
   const handleSubmitComment = async () => {
     if (!newComment.trim()) return
-    
+
     setIsSubmitting(true)
     try {
       const { data: comment, error } = await supabase
@@ -64,7 +64,7 @@ export function PostDetailContent({ post, comments: initialComments, userId }: P
 
       if (error) throw error
 
-      // Trigger moderation
+      // Fire-and-forget moderation check
       fetch('/api/moderate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -72,8 +72,8 @@ export function PostDetailContent({ post, comments: initialComments, userId }: P
           content: newComment.trim(),
           content_type: 'comment',
           content_id: comment.id,
-          author_user_id: userId
-        })
+          author_user_id: userId,
+        }),
       }).catch(console.error)
 
       setNewComment('')
@@ -87,18 +87,18 @@ export function PostDetailContent({ post, comments: initialComments, userId }: P
 
   return (
     <div className="max-w-2xl mx-auto">
-      {/* Back button */}
+      {/* Back button — mt-1 keeps it from being flush to the very top */}
       <Link
         href="/feed"
-        className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground mb-4 transition-colors"
+        className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground mb-6 mt-1 transition-colors group"
       >
-        <ArrowLeft className="h-4 w-4" />
+        <ArrowLeft className="h-4 w-4 transition-transform group-hover:-translate-x-0.5" />
         Back to feed
       </Link>
 
       {/* Post */}
-      <Card className="mb-6">
-        <CardContent className="p-6">
+      <Card className="mb-5">
+        <CardContent className="p-5">
           <div className="flex gap-4">
             {/* Vote Controls */}
             <VoteButtons
@@ -109,38 +109,38 @@ export function PostDetailContent({ post, comments: initialComments, userId }: P
               initialUserVote={post.user_vote}
               layout="vertical"
             />
-            
+
             {/* Post Content */}
             <div className="flex-1 min-w-0">
               {/* Header */}
-              <div className="flex items-center gap-2 mb-3 flex-wrap">
+              <div className="flex items-center gap-2 mb-2.5 flex-wrap">
                 {post.is_anonymous ? (
                   <AnonymousBadge />
                 ) : (
-                  <span className="font-medium">{post.author_name || 'User'}</span>
+                  <span className="font-semibold text-sm">{post.author_name || 'User'}</span>
                 )}
-                <span className="text-sm text-muted-foreground">
+                <span className="text-xs text-muted-foreground">
                   {formatDistanceToNow(new Date(post.created_at), { addSuffix: true })}
                 </span>
                 {post.sentiment && <SentimentBadge sentiment={post.sentiment} />}
               </div>
-              
+
               {/* Title */}
               {post.title && (
-                <h1 className="text-xl font-display font-bold mb-3 text-balance">
+                <h1 className="text-xl font-display font-bold mb-2.5 text-balance leading-snug">
                   {post.title}
                 </h1>
               )}
-              
+
               {/* Content */}
-              <div className="prose prose-sm dark:prose-invert max-w-none">
-                <p className="whitespace-pre-wrap">{post.content}</p>
-              </div>
-              
+              <p className="text-sm text-foreground whitespace-pre-wrap leading-relaxed">
+                {post.content}
+              </p>
+
               {/* Footer */}
-              <div className="flex items-center gap-4 mt-4 pt-4 border-t border-border/50">
+              <div className="flex items-center gap-3 mt-4 pt-3 border-t border-border/50">
                 {post.university_name && (
-                  <span className="text-xs text-muted-foreground bg-muted px-2 py-1 rounded">
+                  <span className="text-xs text-muted-foreground bg-muted px-2.5 py-1 rounded-full">
                     {post.university_name}
                   </span>
                 )}
@@ -152,11 +152,11 @@ export function PostDetailContent({ post, comments: initialComments, userId }: P
       </Card>
 
       {/* Comment Form */}
-      <Card className="mb-6">
-        <CardContent className="p-4">
-          <div className="space-y-4">
+      <Card className="mb-5">
+        <CardContent className="p-5">
+          <div className="space-y-3">
             {/* Anonymous Toggle */}
-            <div className="flex items-center justify-between p-3 rounded-xl bg-muted/50">
+            <div className="flex items-center justify-between p-3 rounded-xl bg-muted/40">
               <div className="flex items-center gap-2">
                 {isAnonymous ? (
                   <EyeOff className="h-4 w-4 text-muted-foreground" />
@@ -173,24 +173,34 @@ export function PostDetailContent({ post, comments: initialComments, userId }: P
                 onCheckedChange={setIsAnonymous}
               />
             </div>
-            
+
             <Textarea
               placeholder="Share your thoughts..."
               value={newComment}
               onChange={(e) => setNewComment(e.target.value)}
-              className="min-h-[100px] resize-none"
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+                  e.preventDefault()
+                  handleSubmitComment()
+                }
+              }}
+              className="min-h-[96px] resize-none text-sm"
               disabled={isSubmitting}
             />
-            
-            <div className="flex justify-end">
-              <Button 
+
+            <div className="flex items-center justify-between">
+              <p className="text-xs text-muted-foreground">
+                Press <kbd className="px-1.5 py-0.5 rounded bg-muted text-xs font-mono">⌘↵</kbd> to submit
+              </p>
+              <Button
                 onClick={handleSubmitComment}
                 disabled={!newComment.trim() || isSubmitting}
+                size="sm"
               >
                 {isSubmitting ? (
                   <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Posting...
+                    <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                    Posting…
                   </>
                 ) : (
                   'Post Comment'
@@ -203,12 +213,12 @@ export function PostDetailContent({ post, comments: initialComments, userId }: P
 
       {/* Comments Section */}
       <div>
-        <h2 className="text-lg font-display font-semibold mb-4">
-          Comments ({comments.length})
+        <h2 className="text-base font-display font-semibold mb-3">
+          Comments <span className="text-muted-foreground font-normal">({comments.length})</span>
         </h2>
         <Card>
           <CardContent className="p-4">
-            <CommentTree 
+            <CommentTree
               comments={comments}
               postId={post.id}
               onReplyPosted={() => router.refresh()}

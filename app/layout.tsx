@@ -21,6 +21,9 @@ const monoFont = JetBrains_Mono({
 export const metadata: Metadata = {
   title: "OmniCampus - University Voice Platform",
   description: "A verified university-only space to speak up—anonymous when you need it, supported when it matters.",
+  icons: {
+    icon: '/favicon.svg',
+  },
 };
 
 export default function RootLayout({

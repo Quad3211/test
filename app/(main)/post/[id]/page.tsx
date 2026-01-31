@@ -11,110 +11,81 @@ interface PageProps {
 export default async function PostDetailPage({ params }: PageProps) {
   const { id } = await params
   const supabase = await createClient()
-  
+
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) notFound()
 
-  // Get post with author info
-  const { data: post, error } = await supabase
-    .from('posts')
-    .select('*')
-    .eq('id', id)
-    .single()
+  // Round 1: Get post + user profile in parallel
+  const [
+    { data: post, error: postError },
+    { data: profile },
+  ] = await Promise.all([
+    supabase.from('posts').select('*').eq('id', id).single(),
+    supabase.from('profiles').select('university_id').eq('user_id', user.id).single(),
+  ])
 
-  if (error || !post) {
-    console.error('Post fetch error:', error)
-    notFound()
-  }
+  if (postError || !post) notFound()
+  if (!profile || profile.university_id !== post.university_id) notFound()
 
-  // Check user has access (same university)
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('university_id')
-    .eq('user_id', user.id)
-    .single()
+  // Round 2: All queries that depend on post.id but are independent of each other
+  const [
+    { data: university },
+    { data: authorProfile },
+    { data: voteCount },
+    { data: userVote },
+    { data: comments },
+  ] = await Promise.all([
+    supabase.from('universities').select('name').eq('id', post.university_id).single(),
 
-  if (!profile || profile.university_id !== post.university_id) {
-    notFound()
-  }
+    !post.is_anonymous
+      ? supabase.from('profiles').select('name').eq('user_id', post.author_user_id).single()
+      : Promise.resolve({ data: null }),
 
-  // Get university name
-  const { data: university } = await supabase
-    .from('universities')
-    .select('name')
-    .eq('id', post.university_id)
-    .single()
+    supabase.from('post_vote_counts').select('upvotes, downvotes').eq('post_id', id).single(),
 
-  // Get author name if not anonymous
-  let authorName: string | undefined
-  if (!post.is_anonymous) {
-    const { data: author } = await supabase
-      .from('profiles')
-      .select('name')
-      .eq('user_id', post.author_user_id)
-      .single()
-    authorName = author?.name
-  }
+    supabase.from('post_votes').select('value').eq('post_id', id).eq('user_id', user.id).single(),
 
-  // Get vote counts
-  const { data: voteCount } = await supabase
-    .from('post_vote_counts')
-    .select('upvotes, downvotes')
-    .eq('post_id', id)
-    .single()
+    supabase
+      .from('comments')
+      .select('id, content, is_anonymous, created_at, parent_comment_id, author_user_id')
+      .eq('post_id', id)
+      .eq('status', 'active')
+      .order('created_at', { ascending: true }),
+  ])
 
-  // Get user's vote
-  const { data: userVote } = await supabase
-    .from('post_votes')
-    .select('value')
-    .eq('post_id', id)
-    .eq('user_id', user.id)
-    .single()
-
-  // Get comments with vote info
-  const { data: comments } = await supabase
-    .from('comments')
-    .select('id, content, is_anonymous, created_at, parent_comment_id, author_user_id')
-    .eq('post_id', id)
-    .eq('status', 'active')
-    .order('created_at', { ascending: true })
-
-  // Get comment votes
+  // Round 3: Comment-dependent queries (need commentIds)
   const commentIds = comments?.map(c => c.id) || []
-  
-  const { data: commentVoteCounts } = await supabase
-    .from('comment_vote_counts')
-    .select('comment_id, upvotes, downvotes')
-    .in('comment_id', commentIds)
+  const nonAnonCommentAuthorIds = [
+    ...new Set((comments || []).filter(c => !c.is_anonymous).map(c => c.author_user_id))
+  ]
 
-  const { data: userCommentVotes } = await supabase
-    .from('comment_votes')
-    .select('comment_id, value')
-    .eq('user_id', user.id)
-    .in('comment_id', commentIds)
+  const [
+    { data: commentVoteCounts },
+    { data: userCommentVotes },
+    { data: aliases },
+    { data: commentAuthors },
+  ] = await Promise.all([
+    commentIds.length > 0
+      ? supabase.from('comment_vote_counts').select('comment_id, upvotes, downvotes').in('comment_id', commentIds)
+      : Promise.resolve({ data: [] }),
 
-  // Get thread aliases for anonymous users
-  const { data: aliases } = await supabase
-    .from('thread_aliases')
-    .select('user_id, alias_label')
-    .eq('post_id', id)
+    commentIds.length > 0
+      ? supabase.from('comment_votes').select('comment_id, value').eq('user_id', user.id).in('comment_id', commentIds)
+      : Promise.resolve({ data: [] }),
 
-  // Get author names for non-anonymous comments
-  const nonAnonComments = comments?.filter(c => !c.is_anonymous) || []
-  const commentAuthorIds = [...new Set(nonAnonComments.map(c => c.author_user_id))]
-  
-  const { data: commentAuthors } = await supabase
-    .from('profiles')
-    .select('user_id, name')
-    .in('user_id', commentAuthorIds)
+    supabase.from('thread_aliases').select('user_id, alias_label').eq('post_id', id),
 
-  // Create lookup maps
-  const commentVoteMap = new Map(commentVoteCounts?.map(v => [v.comment_id, v]) || [])
-  const userCommentVoteMap = new Map(userCommentVotes?.map(v => [v.comment_id, v.value]) || [])
-  const aliasMap = new Map(aliases?.map(a => [a.user_id, a.alias_label]) || [])
-  const commentAuthorMap = new Map(commentAuthors?.map(a => [a.user_id, a.name]) || [])
+    nonAnonCommentAuthorIds.length > 0
+      ? supabase.from('profiles').select('user_id, name').in('user_id', nonAnonCommentAuthorIds)
+      : Promise.resolve({ data: [] }),
+  ])
 
-  // Transform post data
+  // Build lookup maps
+  const commentVoteMap = new Map((commentVoteCounts || []).map(v => [v.comment_id, v]))
+  const userCommentVoteMap = new Map((userCommentVotes || []).map(v => [v.comment_id, v.value]))
+  const aliasMap = new Map((aliases || []).map(a => [a.user_id, a.alias_label]))
+  const commentAuthorMap = new Map((commentAuthors || []).map(a => [a.user_id, a.name]))
+
   const postData = {
     id: post.id,
     title: post.title,
@@ -122,14 +93,13 @@ export default async function PostDetailPage({ params }: PageProps) {
     is_anonymous: post.is_anonymous,
     sentiment: post.sentiment,
     created_at: post.created_at,
-    author_name: authorName,
+    author_name: authorProfile?.name,
     university_name: university?.name,
     upvotes: voteCount?.upvotes || 0,
     downvotes: voteCount?.downvotes || 0,
     user_vote: userVote?.value || null,
   }
 
-  // Transform comments data
   const commentsData = (comments || []).map(comment => {
     const votes = commentVoteMap.get(comment.id)
     return {
@@ -147,7 +117,7 @@ export default async function PostDetailPage({ params }: PageProps) {
   })
 
   return (
-    <PostDetailContent 
+    <PostDetailContent
       post={postData}
       comments={commentsData}
       userId={user.id}

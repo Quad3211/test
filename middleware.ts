@@ -1,5 +1,5 @@
 import { createServerClient, type CookieOptions } from '@supabase/ssr'
-import { NextResponse, type NextRequest } from 'next/server'
+import { type NextRequest, NextResponse } from 'next/server'
 
 export async function middleware(request: NextRequest) {
   let response = NextResponse.next({
@@ -17,67 +17,46 @@ export async function middleware(request: NextRequest) {
           return request.cookies.get(name)?.value
         },
         set(name: string, value: string, options: CookieOptions) {
-          request.cookies.set({
-            name,
-            value,
-            ...options,
-          })
-          response = NextResponse.next({
-            request: {
-              headers: request.headers,
-            },
-          })
-          response.cookies.set({
-            name,
-            value,
-            ...options,
-          })
+          try {
+            request.cookies.set({ name, value, ...options })
+            response = NextResponse.next({
+              request: { headers: request.headers },
+            })
+            response.cookies.set({ name, value, ...options })
+          } catch (error) {}
         },
         remove(name: string, options: CookieOptions) {
-          request.cookies.set({
-            name,
-            value: '',
-            ...options,
-          })
-          response = NextResponse.next({
-            request: {
-              headers: request.headers,
-            },
-          })
-          response.cookies.set({
-            name,
-            value: '',
-            ...options,
-          })
+          try {
+            request.cookies.set({ name, value: '', ...options })
+            response = NextResponse.next({
+              request: { headers: request.headers },
+            })
+            response.cookies.set({ name, value: '', ...options })
+          } catch (error) {}
         },
       },
     }
   )
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
+  // Refresh session so SSR pages always have a fresh token
+  const { data: { user } } = await supabase.auth.getUser()
 
-  // Protected routes
-  const protectedRoutes = ['/feed', '/post', '/trends', '/inbox', '/settings', '/moderation', '/onboarding']
-  const authRoutes = ['/auth/sign-in', '/auth/sign-up']
-  
-  const isProtectedRoute = protectedRoutes.some(route => request.nextUrl.pathname.startsWith(route))
-  const isAuthRoute = authRoutes.some(route => request.nextUrl.pathname.startsWith(route))
-  const isOnboarding = request.nextUrl.pathname.startsWith('/onboarding')
+  const pathname = request.nextUrl.pathname
 
-  // Redirect to sign-in if not authenticated and trying to access protected route
-  if (isProtectedRoute && !user) {
-    return NextResponse.redirect(new URL('/auth/sign-in', request.url))
+  // Public routes that don't need auth
+  const publicRoutes = ['/auth/sign-in', '/auth/sign-up', '/auth/callback']
+  const isPublicRoute = publicRoutes.some(route => pathname.startsWith(route))
+
+  // If no user and hitting a protected route, redirect to sign-in
+  if (!user && !isPublicRoute && pathname !== '/') {
+    const url = request.nextUrl.clone()
+    url.pathname = '/auth/sign-in'
+    return NextResponse.redirect(url)
   }
 
-  // Redirect to feed if authenticated and trying to access auth routes
-  if (isAuthRoute && user) {
-    return NextResponse.redirect(new URL('/feed', request.url))
-  }
-
-  // Check if user needs to complete onboarding
-  if (user && isProtectedRoute && !isOnboarding) {
+  // If user exists but hasn't completed onboarding, redirect there
+  // (skip if they're already on onboarding or auth routes)
+  if (user && !isPublicRoute && !pathname.startsWith('/onboarding')) {
     const { data: profile } = await supabase
       .from('profiles')
       .select('university_id')
@@ -85,7 +64,24 @@ export async function middleware(request: NextRequest) {
       .single()
 
     if (!profile?.university_id) {
-      return NextResponse.redirect(new URL('/onboarding/university', request.url))
+      const url = request.nextUrl.clone()
+      url.pathname = '/onboarding/university'
+      return NextResponse.redirect(url)
+    }
+  }
+
+  // If user is on auth pages but already signed in with complete profile, go to feed
+  if (user && (pathname === '/auth/sign-in' || pathname === '/auth/sign-up')) {
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('university_id')
+      .eq('user_id', user.id)
+      .single()
+
+    if (profile?.university_id) {
+      const url = request.nextUrl.clone()
+      url.pathname = '/feed'
+      return NextResponse.redirect(url)
     }
   }
 
@@ -94,6 +90,6 @@ export async function middleware(request: NextRequest) {
 
 export const config = {
   matcher: [
-    '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
+    '/((?!_next/static|_next/image|favicon.ico|sitemap.xml|robots.txt).*)',
   ],
 }

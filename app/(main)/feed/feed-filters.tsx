@@ -22,16 +22,16 @@ export function FeedFilters({ currentFilter }: FeedFiltersProps) {
   }
 
   return (
-    <div className="flex items-center gap-2 mb-6 overflow-x-auto pb-2 -mx-4 px-4 sm:mx-0 sm:px-0">
+    <div className="flex items-center gap-1.5 mb-5 overflow-x-auto pb-1 -mx-4 px-4 sm:mx-0 sm:px-0 scrollbar-hide">
       {filters.map((filter) => (
         <button
           key={filter.value}
           onClick={() => handleFilterChange(filter.value)}
           className={cn(
-            'px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap transition-colors',
+            'px-4 py-1.5 rounded-full text-sm font-medium whitespace-nowrap transition-all duration-200 ease-out',
             currentFilter === filter.value
-              ? 'bg-primary text-primary-foreground'
-              : 'bg-muted text-muted-foreground hover:bg-muted/80 hover:text-foreground'
+              ? 'bg-primary text-primary-foreground shadow-sm'
+              : 'bg-muted/60 text-muted-foreground hover:bg-muted hover:text-foreground'
           )}
         >
           {filter.label}
